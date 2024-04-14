@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/azure-container-networking/log"
 )
 
+//shchen test
 type PodNetworkInterfaceInfo struct {
 	PodName       string
 	PodNamespace  string
