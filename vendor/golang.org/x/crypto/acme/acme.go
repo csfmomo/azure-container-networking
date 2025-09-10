@@ -31,9 +31,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
@@ -88,7 +86,7 @@ type Client struct {
 	//
 	// The following algorithms are supported:
 	// RS256, ES256, ES384 and ES512.
-	// See RFC7518 for more details about the algorithms.
+	// See RFC 7518 for more details about the algorithms.
 	Key crypto.Signer
 
 	// HTTPClient optionally specifies an HTTP client to use
@@ -306,6 +304,20 @@ func (c *Client) UpdateReg(ctx context.Context, acct *Account) (*Account, error)
 	return c.updateRegRFC(ctx, acct)
 }
 
+// AccountKeyRollover attempts to transition a client's account key to a new key.
+// On success client's Key is updated which is not concurrency safe.
+// On failure an error will be returned.
+// The new key is already registered with the ACME provider if the following is true:
+//   - error is of type acme.Error
+//   - StatusCode should be 409 (Conflict)
+//   - Location header will have the KID of the associated account
+//
+// More about account key rollover can be found at
+// https://tools.ietf.org/html/rfc8555#section-7.3.5.
+func (c *Client) AccountKeyRollover(ctx context.Context, newKey crypto.Signer) error {
+	return c.accountKeyRollover(ctx, newKey)
+}
+
 // Authorize performs the initial step in the pre-authorization flow,
 // as opposed to order-based flow.
 // The caller will then need to choose from and perform a set of returned
@@ -338,6 +350,10 @@ func (c *Client) AuthorizeIP(ctx context.Context, ipaddr string) (*Authorization
 func (c *Client) authorize(ctx context.Context, typ, val string) (*Authorization, error) {
 	if _, err := c.Discover(ctx); err != nil {
 		return nil, err
+	}
+	if c.dir.AuthzURL == "" {
+		// Pre-Authorization is unsupported
+		return nil, errPreAuthorizationNotSupported
 	}
 
 	type authzID struct {
@@ -453,7 +469,7 @@ func (c *Client) WaitAuthorization(ctx context.Context, url string) (*Authorizat
 		// while waiting for a final authorization status.
 		d := retryAfter(res.Header.Get("Retry-After"))
 		if d == 0 {
-			// Given that the fastest challenges TLS-SNI and HTTP-01
+			// Given that the fastest challenges TLS-ALPN and HTTP-01
 			// require a CA to make at least 1 network round trip
 			// and most likely persist a challenge state,
 			// this default delay seems reasonable.
@@ -500,7 +516,11 @@ func (c *Client) Accept(ctx context.Context, chal *Challenge) (*Challenge, error
 		return nil, err
 	}
 
-	res, err := c.post(ctx, nil, chal.URI, json.RawMessage("{}"), wantStatus(
+	payload := json.RawMessage("{}")
+	if len(chal.Payload) != 0 {
+		payload = chal.Payload
+	}
+	res, err := c.post(ctx, nil, chal.URI, payload, wantStatus(
 		http.StatusOK,       // according to the spec
 		http.StatusAccepted, // Let's Encrypt: see https://goo.gl/WsJ7VT (acme-divergences.md)
 	))
@@ -550,44 +570,21 @@ func (c *Client) HTTP01ChallengePath(token string) string {
 }
 
 // TLSSNI01ChallengeCert creates a certificate for TLS-SNI-01 challenge response.
+// Always returns an error.
 //
-// Deprecated: This challenge type is unused in both draft-02 and RFC versions of the ACME spec.
-func (c *Client) TLSSNI01ChallengeCert(token string, opt ...CertOption) (cert tls.Certificate, name string, err error) {
-	ka, err := keyAuth(c.Key.Public(), token)
-	if err != nil {
-		return tls.Certificate{}, "", err
-	}
-	b := sha256.Sum256([]byte(ka))
-	h := hex.EncodeToString(b[:])
-	name = fmt.Sprintf("%s.%s.acme.invalid", h[:32], h[32:])
-	cert, err = tlsChallengeCert([]string{name}, opt)
-	if err != nil {
-		return tls.Certificate{}, "", err
-	}
-	return cert, name, nil
+// Deprecated: This challenge type was only present in pre-standardized ACME
+// protocol drafts and is insecure for use in shared hosting environments.
+func (c *Client) TLSSNI01ChallengeCert(token string, opt ...CertOption) (tls.Certificate, string, error) {
+	return tls.Certificate{}, "", errPreRFC
 }
 
 // TLSSNI02ChallengeCert creates a certificate for TLS-SNI-02 challenge response.
+// Always returns an error.
 //
-// Deprecated: This challenge type is unused in both draft-02 and RFC versions of the ACME spec.
-func (c *Client) TLSSNI02ChallengeCert(token string, opt ...CertOption) (cert tls.Certificate, name string, err error) {
-	b := sha256.Sum256([]byte(token))
-	h := hex.EncodeToString(b[:])
-	sanA := fmt.Sprintf("%s.%s.token.acme.invalid", h[:32], h[32:])
-
-	ka, err := keyAuth(c.Key.Public(), token)
-	if err != nil {
-		return tls.Certificate{}, "", err
-	}
-	b = sha256.Sum256([]byte(ka))
-	h = hex.EncodeToString(b[:])
-	sanB := fmt.Sprintf("%s.%s.ka.acme.invalid", h[:32], h[32:])
-
-	cert, err = tlsChallengeCert([]string{sanA, sanB}, opt)
-	if err != nil {
-		return tls.Certificate{}, "", err
-	}
-	return cert, sanA, nil
+// Deprecated: This challenge type was only present in pre-standardized ACME
+// protocol drafts and is insecure for use in shared hosting environments.
+func (c *Client) TLSSNI02ChallengeCert(token string, opt ...CertOption) (tls.Certificate, string, error) {
+	return tls.Certificate{}, "", errPreRFC
 }
 
 // TLSALPN01ChallengeCert creates a certificate for TLS-ALPN-01 challenge response.
@@ -751,7 +748,7 @@ func defaultTLSChallengeCertTemplate() *x509.Certificate {
 	}
 }
 
-// tlsChallengeCert creates a temporary certificate for TLS-SNI challenges
+// tlsChallengeCert creates a temporary certificate for TLS-ALPN challenges
 // with the given SANs and auto-generated public/private key pair.
 // The Subject Common Name is set to the first SAN to aid debugging.
 // To create a cert with a custom key pair, specify WithKey option.
@@ -792,12 +789,6 @@ func tlsChallengeCert(san []string, opt []CertOption) (tls.Certificate, error) {
 		Certificate: [][]byte{der},
 		PrivateKey:  key,
 	}, nil
-}
-
-// encodePEM returns b encoded as PEM with block of type typ.
-func encodePEM(typ string, b []byte) []byte {
-	pb := &pem.Block{Type: typ, Bytes: b}
-	return pem.EncodeToMemory(pb)
 }
 
 // timeNow is time.Now, except in tests which can mess with it.
