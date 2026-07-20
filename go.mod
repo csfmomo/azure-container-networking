@@ -1,6 +1,6 @@
 module github.com/Azure/azure-container-networking
 
-go 1.19
+go 1.22
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3
@@ -15,7 +15,7 @@ require (
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20210525090646-64b7a4574d14
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-version v1.6.0
@@ -43,8 +43,10 @@ require (
 	k8s.io/klog/v2 v2.70.0
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-runtime v0.12.3
-	sigs.k8s.io/yaml v1.3.0
+	sigs.k8s.io/yaml v1.6.0
 )
+
+require go.yaml.in/yaml/v2 v2.4.2 // indirect
 
 require (
 	code.cloudfoundry.org/clock v1.0.0 // indirect
