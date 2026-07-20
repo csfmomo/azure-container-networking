@@ -1,6 +1,6 @@
 module github.com/Azure/azure-container-networking
 
-go 1.19
+go 1.23
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3
@@ -15,7 +15,7 @@ require (
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20210525090646-64b7a4574d14
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-version v1.6.0
@@ -34,7 +34,7 @@ require (
 	go.uber.org/zap v1.23.0
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
 	google.golang.org/grpc v1.49.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.36.11
 	k8s.io/api v0.24.2
 	k8s.io/apiextensions-apiserver v0.24.2
 	k8s.io/apimachinery v0.24.2
